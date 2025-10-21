@@ -23,9 +23,39 @@ struct LoopCreatorView: View {
     @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                if appState.hasImportedVideo {
+        VStack(spacing: 0) {
+            // Header - 固定在顶部
+            HStack {
+                Text("LoopClip")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                HStack(spacing: 12) {
+                    Button(action: {
+                        showingImagePicker = true
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Button(action: {
+                        // Settings action
+                    }) {
+                        Image(systemName: "gear")
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Color(UIColor.systemBackground))
+            
+            // 内容区域
+            if appState.hasImportedVideo {
                     // 多视频缩略图横向滚动条
                     if appState.selectedVideoURLs.count > 1 {
                         VideoThumbnailScrollView(selectedVideoIndices: $selectedVideoIndices)
@@ -54,45 +84,9 @@ struct LoopCreatorView: View {
                     .environmentObject(videoManager)
                     .environmentObject(appState)
                     
-                } else {
-                    // No Video State
-                    NoVideoStateView(showingImagePicker: $showingImagePicker)
-                        .edgesIgnoringSafeArea(.all)
-                }
-                
-                Spacer()
-            }
-            .navigationBarHidden(true)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                // Header - 紧贴刘海屏设计
-                HStack {
-                    Text("LoopClip")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    
-                    Spacer()
-                    
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            showingImagePicker = true
-                        }) {
-                            Image(systemName: "square.and.arrow.up")
-                                .font(.title3)
-                                .foregroundColor(.primary)
-                        }
-                        
-                        Button(action: {
-                            // Settings action
-                        }) {
-                            Image(systemName: "gear")
-                                .font(.title3)
-                                .foregroundColor(.primary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .background(Color(UIColor.systemBackground))
+            } else {
+                // No Video State
+                NoVideoStateView(showingImagePicker: $showingImagePicker)
             }
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedVideos, matching: .videos, preferredItemEncoding: .automatic, photoLibrary: .shared())
@@ -668,10 +662,13 @@ struct NoVideoStateView: View {
     @Binding var showingImagePicker: Bool
     
     var body: some View {
-        GeometryReader { geometry in
+        ZStack {
+            // 背景颜色
+            Color(white: 0.97)
+                .ignoresSafeArea()
+            
             VStack(spacing: 0) {
                 Spacer()
-                    .frame(height: geometry.size.height * 0.1) // 上方留出10%的空间
                 
                 VStack(spacing: 24) {
                     // Film Icon Container - 大圆形背景
@@ -739,11 +736,8 @@ struct NoVideoStateView: View {
                 }
                 
                 Spacer()
-                    .frame(height: geometry.size.height * 0.2) // 下方留出20%的空间
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .background(Color(white: 0.97)) // 浅灰色背景
     }
 }
 
@@ -937,4 +931,5 @@ struct VideoProcessingOverlay: View {
 #Preview {
     LoopCreatorView()
         .environmentObject(AppState())
+        .preferredColorScheme(.light)
 }
