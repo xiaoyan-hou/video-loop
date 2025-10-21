@@ -25,7 +25,46 @@ struct LoopCreatorView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // Header
+                if appState.hasImportedVideo {
+                    // 多视频缩略图横向滚动条
+                    if appState.selectedVideoURLs.count > 1 {
+                        VideoThumbnailScrollView(selectedVideoIndices: $selectedVideoIndices)
+                            .environmentObject(appState)
+                            .environmentObject(videoManager)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 16)
+                    }
+                    
+                    // 当前激活视频预览窗
+                    CurrentVideoPreviewView(showingFullScreenPlayer: $showingFullScreenPlayer, selectedVideoIndices: $selectedVideoIndices)
+                        .environmentObject(videoManager)
+                        .environmentObject(appState)
+                        .onChange(of: appState.isMuted) { newValue in
+                            videoManager.setMuted(newValue)
+                        }
+                    
+                    
+                    
+                    // Loop Controls
+                    LoopControlsView(
+                        selectedVideoIndices: $selectedVideoIndices, 
+                        showingFullScreenPlayer: $showingFullScreenPlayer,
+                        onCombineVideos: combineSelectedVideos
+                    )
+                    .environmentObject(videoManager)
+                    .environmentObject(appState)
+                    
+                } else {
+                    // No Video State
+                    NoVideoStateView(showingImagePicker: $showingImagePicker)
+                        .edgesIgnoringSafeArea(.all)
+                }
+                
+                Spacer()
+            }
+            .navigationBarHidden(true)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                // Header - 紧贴刘海屏设计
                 HStack {
                     Text("LoopClip")
                         .font(.title2)
@@ -52,46 +91,9 @@ struct LoopCreatorView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
-                
-                if appState.hasImportedVideo {
-                    // 多视频缩略图横向滚动条
-                    if appState.selectedVideoURLs.count > 1 {
-                        VideoThumbnailScrollView(selectedVideoIndices: $selectedVideoIndices)
-                            .environmentObject(appState)
-                            .environmentObject(videoManager)
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 16)
-                    }
-                    
-                    // 当前激活视频预览窗
-                    CurrentVideoPreviewView(showingFullScreenPlayer: $showingFullScreenPlayer, selectedVideoIndices: $selectedVideoIndices)
-                        .environmentObject(videoManager)
-                        .environmentObject(appState)
-                        .onChange(of: appState.isMuted) { newValue in
-                            videoManager.setMuted(newValue)
-                        }
-                    
-
-                    
-                    // Loop Controls
-                    LoopControlsView(
-                        selectedVideoIndices: $selectedVideoIndices, 
-                        showingFullScreenPlayer: $showingFullScreenPlayer,
-                        onCombineVideos: combineSelectedVideos
-                    )
-                    .environmentObject(videoManager)
-                    .environmentObject(appState)
-                    
-                } else {
-                    // No Video State
-                    NoVideoStateView(showingImagePicker: $showingImagePicker)
-                }
-                
-                Spacer()
+                .padding(.vertical, 12)
+                .background(Color(UIColor.systemBackground))
             }
-            .navigationBarHidden(true)
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedVideos, matching: .videos, preferredItemEncoding: .automatic, photoLibrary: .shared())
         .onChange(of: selectedVideos) { newValue in
@@ -666,53 +668,82 @@ struct NoVideoStateView: View {
     @Binding var showingImagePicker: Bool
     
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer()
-            
-            VStack(spacing: 24) {
-                // App Icon
-                ZStack {
-                    Circle()
-                        .fill(Color.blue.opacity(0.1))
-                        .frame(width: 100, height: 100)
-                    
-                    Image(systemName: "film")
-                        .font(.system(size: 48))
-                        .foregroundColor(.blue)
-                }
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                Spacer()
+                    .frame(height: geometry.size.height * 0.1) // 上方留出10%的空间
                 
-                // Title and Description
-                VStack(spacing: 8) {
-                    Text("No Videos Yet")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    Text("Import videos to create loops")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                }
-                
-                // Import Button
-                Button(action: {
-                    showingImagePicker = true
-                }) {
-                    HStack {
-                        Image(systemName: "photo")
-                        Text("Import Videos")
+                VStack(spacing: 24) {
+                    // Film Icon Container - 大圆形背景
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.85, green: 0.92, blue: 0.98)) // 浅蓝色背景
+                            .frame(width: 100, height: 100)
+                        
+                        Image(systemName: "film")
+                            .font(.system(size: 40, weight: .regular))
+                            .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0)) // iOS 蓝色
                     }
-                    .font(.headline)
-                    .foregroundColor(.white)
+                    
+                    VStack(spacing: 8) {
+                        // Title
+                        Text("No Video Selected")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.black)
+                        
+                        // Subtitle
+                        Text("Please import a video to get started")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(white: 0.6))
+                    }
+                    
+                    // Info Box - 浅蓝色背景信息框
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0))
+                            .padding(.top, 1)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Perfect for mall promotions, exhibition demos, digital signage and other looping scenarios")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0))
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.blue)
-                    .cornerRadius(12)
+                    .background(Color(red: 0.93, green: 0.95, blue: 0.99)) // 浅蓝灰色背景
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                    
+                    // Import Button - 蓝色主按钮
+                    Button(action: {
+                        showingImagePicker = true
+                    }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 18, weight: .medium))
+                            Text("Import from Gallery")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(red: 0.0, green: 0.48, blue: 1.0)) // iOS 蓝色
+                        .cornerRadius(14)
+                    }
+                    .padding(.horizontal, 20)
                 }
-                .padding(.horizontal, 40)
+                
+                Spacer()
+                    .frame(height: geometry.size.height * 0.2) // 下方留出20%的空间
             }
-            
-            Spacer()
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .background(Color(white: 0.97)) // 浅灰色背景
     }
 }
 
