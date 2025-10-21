@@ -47,17 +47,24 @@ class VideoPlayerManager: ObservableObject {
     }
     
     func loadVideo(from url: URL) {
-        // 先停止当前播放器
+        // 如果已有播放器，替换 currentItem 而不是创建新播放器
         if let currentPlayer = player {
             currentPlayer.pause()
+            // 移除旧的结束通知观察者
+            removeEndObserver()
+            let newItem = AVPlayerItem(url: url)
+            currentPlayer.replaceCurrentItem(with: newItem)
+            // 为新的 item 添加结束通知观察者
+            addEndObserver(to: currentPlayer)
+        } else {
+            // 首次加载时创建新播放器
+            player = AVPlayer(url: url)
         }
         
-        // 创建新的播放器
-        player = AVPlayer(url: url)
         isPlaying = false
         currentTime = 0
         duration = 0
-        loopCount = 0
+        // 注意：不要在这里重置 loopCount，因为这会影响多视频循环计数
     }
     
     func play() {
