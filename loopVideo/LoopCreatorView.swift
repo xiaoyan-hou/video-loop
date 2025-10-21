@@ -12,11 +12,14 @@ import PhotosUI
 struct LoopCreatorView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var videoManager = VideoPlayerManager()
+    @StateObject private var videoComposer = VideoComposer()
     @State private var showingImagePicker = false
     @State private var selectedVideos: [PhotosPickerItem] = []
     @State private var selectedThumbnailIndex: Int? = nil
     @State private var selectedVideoIndices: Set<Int> = []
     @State private var showingFullScreenPlayer = false
+    @State private var showingShareSheet = false
+    @State private var videoToShare: URL?
     @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
@@ -66,16 +69,20 @@ struct LoopCreatorView: View {
                     CurrentVideoPreviewView(showingFullScreenPlayer: $showingFullScreenPlayer, selectedVideoIndices: $selectedVideoIndices)
                         .environmentObject(videoManager)
                         .environmentObject(appState)
-                        .onChange(of: appState.isMuted) { _, newValue in
+                        .onChange(of: appState.isMuted) { newValue in
                             videoManager.setMuted(newValue)
                         }
                     
 
                     
                     // Loop Controls
-                    LoopControlsView(selectedVideoIndices: $selectedVideoIndices)
-                        .environmentObject(videoManager)
-                        .environmentObject(appState)
+                    LoopControlsView(
+                        selectedVideoIndices: $selectedVideoIndices, 
+                        showingFullScreenPlayer: $showingFullScreenPlayer,
+                        onCombineVideos: combineSelectedVideos
+                    )
+                    .environmentObject(videoManager)
+                    .environmentObject(appState)
                     
                 } else {
                     // No Video State
@@ -87,7 +94,7 @@ struct LoopCreatorView: View {
             .navigationBarHidden(true)
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedVideos, matching: .videos, preferredItemEncoding: .automatic, photoLibrary: .shared())
-        .onChange(of: selectedVideos) { _, newValue in
+        .onChange(of: selectedVideos) { newValue in
             if !newValue.isEmpty {
                 // 导入所有选中的视频
                 loadVideos(from: newValue)
@@ -101,7 +108,25 @@ struct LoopCreatorView: View {
                     .environmentObject(videoManager)
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .sheet(isPresented: $showingShareSheet) {
+            if let videoURL = videoToShare {
+                ShareSheet(activityItems: [videoURL])
+            }
+        }
+        .alert(videoComposer.alertTitle, isPresented: $videoComposer.showAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(videoComposer.alertMessage)
+        }
+        .overlay(
+            // 视频处理进度覆盖层
+            Group {
+                if videoComposer.isProcessing {
+                    VideoProcessingOverlay(progress: videoComposer.progress, message: videoComposer.statusMessage)
+                }
+            }
+        )
+        .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .background, .inactive:
                 // 应用进入后台或非活跃状态时，停止视频
@@ -135,6 +160,68 @@ struct LoopCreatorView: View {
                         print("Error loading video: \(error)")
                     }
                 }
+            }
+        }
+    }
+    
+    private func combineSelectedVideos() {
+        // 获取排序后的选中视频URL
+        let selectedURLs = selectedVideoIndices.sorted().compactMap { index in
+            appState.selectedVideoURLs.indices.contains(index) ? appState.selectedVideoURLs[index] : nil
+        }
+        
+        guard selectedURLs.count >= 2 else {
+            videoComposer.showError(VideoComposerError.noVideos)
+            return
+        }
+        
+        // 合并视频
+        videoComposer.combineVideos(urls: selectedURLs) { result in
+            switch result {
+            case .success(let combinedURL):
+                // 视频合并成功，显示保存选项
+                self.showSaveOptions(for: combinedURL)
+                
+            case .failure(let error):
+                videoComposer.showError(error)
+            }
+        }
+    }
+    
+    private func showSaveOptions(for videoURL: URL) {
+        // 确保在主线程上显示 UI
+        DispatchQueue.main.async {
+            let alert = UIAlertController(
+                title: "Video Combined",
+                message: "Your videos have been combined successfully!",
+                preferredStyle: .actionSheet
+            )
+            
+            // 保存到相册
+            alert.addAction(UIAlertAction(title: "Save to Photos", style: .default) { _ in
+                self.videoComposer.saveToPhotos(videoURL: videoURL) { result in
+                    switch result {
+                    case .success:
+                        self.videoComposer.showSuccess(message: "Video saved to Photos successfully!")
+                    case .failure(let error):
+                        self.videoComposer.showError(error)
+                    }
+                }
+            })
+            
+            // 分享/导出
+            alert.addAction(UIAlertAction(title: "Share/Export", style: .default) { _ in
+                self.videoToShare = videoURL
+                self.showingShareSheet = true
+            })
+            
+            // 取消
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+            
+            // 显示弹窗
+            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let viewController = windowScene.windows.first?.rootViewController {
+                viewController.present(alert, animated: true)
             }
         }
     }
@@ -275,11 +362,13 @@ struct LoopCreatorThumbnailCard: View {
                     .frame(width: 80, height: 60)
                 }
                 
-                // 播放图标
-                Image(systemName: "play.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(.white)
-                    .background(Color.black.opacity(0.3), in: Circle())
+                // 播放图标 - 完全居中
+                ZStack {
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(.white)
+                        .background(Color.black.opacity(0.3), in: Circle())
+                }
             }
         }
         .buttonStyle(PlainButtonStyle())
@@ -324,7 +413,8 @@ struct CurrentVideoPreviewView: View {
                         showingFullScreenPlayer = true
                     } else {
                         // 播放选中的视频并进入全屏
-                        let selectedURLs = selectedVideoIndices.compactMap { index in
+                        // 将 Set 转换为排序后的数组，保证播放顺序与缩略图顺序一致
+                        let selectedURLs = selectedVideoIndices.sorted().compactMap { index in
                             appState.selectedVideoURLs.indices.contains(index) ? appState.selectedVideoURLs[index] : nil
                         }
                         videoManager.setMuted(appState.isMuted)
@@ -332,40 +422,35 @@ struct CurrentVideoPreviewView: View {
                         showingFullScreenPlayer = true
                     }
                 }) {
-                    VideoThumbnailView(url: currentURL)
-                        .frame(height: 180)
-                        .cornerRadius(12)
-                        .overlay(
-                            // 播放按钮覆盖层
-                            VStack {
-                                Spacer()
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "play.circle.fill")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(.white)
-                                        .background(Color.black.opacity(0.3), in: Circle())
-                                    Spacer()
-                                }
-                                .padding(.bottom, 20)
-                            }
-                        )
+                    ZStack {
+                        VideoThumbnailView(url: currentURL)
+                            .frame(height: 180)
+                            .cornerRadius(12)
+                        
+                        // 播放按钮覆盖层 - 完全居中
+                        Image(systemName: "play.circle.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.3), radius: 4, x: 0, y: 2)
+                    }
                 }
                 .buttonStyle(PlainButtonStyle())
             } else {
-                // 占位符
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(height: 180)
-                    .overlay(
-                        VStack {
-                            Image(systemName: "film")
-                                .font(.system(size: 50))
-                                .foregroundColor(.gray)
-                            Text("No Video Selected")
-                                .foregroundColor(.gray)
-                        }
-                    )
+                // 占位符 - 完全居中
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(height: 180)
+                    
+                    VStack(spacing: 12) {
+                        Image(systemName: "film")
+                            .font(.system(size: 50))
+                            .foregroundColor(.gray)
+                        Text("No Video Selected")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                    }
+                }
             }
         }
         .padding(.horizontal, 20)
@@ -426,110 +511,98 @@ struct LoopControlsView: View {
     @EnvironmentObject var videoManager: VideoPlayerManager
     @EnvironmentObject var appState: AppState
     @Binding var selectedVideoIndices: Set<Int>
+    @Binding var showingFullScreenPlayer: Bool
     @State private var selectedThumbnailIndex: Int? = nil
+    let onCombineVideos: () -> Void
     
     var body: some View {
-        VStack(spacing: 16) {
-            // Loop Settings
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Loop Settings")
-                    .font(.headline)
-                    .padding(.horizontal, 20)
-                
-                HStack(spacing: 12) {
-                    ForEach(LoopCount.allCases, id: \.self) { loopCount in
-                        Button(action: {
-                            videoManager.setLoopCount(loopCount)
-                        }) {
-                            Text(loopCount.displayName)
-                                .font(.subheadline)
-                                .foregroundColor(videoManager.currentLoopCount == loopCount ? .white : .primary)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 8)
-                                .background(
-                                    videoManager.currentLoopCount == loopCount ? 
-                                    Color.blue : Color(.systemGray6)
-                                )
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-                .padding(.horizontal, 20)
-            }
-            
-            // Playback Controls
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Playback Controls")
-                    .font(.headline)
-                    .padding(.horizontal, 20)
-                
-                // Preview Button
-                Button(action: {
-                    if selectedVideoIndices.isEmpty {
-                        // 如果没有选中任何视频，播放当前视频
-                        if let url = appState.currentVideoURL {
-                            videoManager.loadVideo(from: url)
-                            videoManager.setMuted(appState.isMuted)
-                            videoManager.startLooping()
-                        }
-                    } else {
-                        // 播放选中的视频
-                        let selectedURLs = selectedVideoIndices.compactMap { index in
-                            appState.selectedVideoURLs.indices.contains(index) ? appState.selectedVideoURLs[index] : nil
-                        }
-                        videoManager.setMuted(appState.isMuted)
-                        videoManager.startLoopingSelectedVideos(selectedURLs)
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "play.circle.fill")
-                        Text("Preview Loop")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(Color.blue)
-                    .cornerRadius(12)
-                }
-                .disabled(videoManager.player == nil)
-                .opacity(videoManager.player == nil ? 0.5 : 1.0)
-                .padding(.horizontal, 20)
-                
-                // 显示选中视频数量
-                if !selectedVideoIndices.isEmpty {
-                    Text("\(selectedVideoIndices.count) video(s) selected")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        if #available(iOS 17.0, *) {
+            VStack(spacing: 16) {
+                // Loop Settings
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Loop Settings")
+                        .font(.headline)
                         .padding(.horizontal, 20)
-                }
-            }
-            
-            // Additional Options
-            VStack(spacing: 12) {
-                Button(action: {
-                    // Combine videos action
-                }) {
-                    HStack {
-                        Image(systemName: "doc.on.doc")
-                        Text("Combine Videos")
+                    
+                    HStack(spacing: 12) {
+                        ForEach(LoopCount.allCases, id: \.self) { loopCount in
+                            Button(action: {
+                                videoManager.setLoopCount(loopCount)
+                            }) {
+                                Text(loopCount.displayName)
+                                    .font(.subheadline)
+                                    .foregroundColor(videoManager.currentLoopCount == loopCount ? .white : .primary)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        videoManager.currentLoopCount == loopCount ? 
+                                        Color.blue : Color(.systemGray6)
+                                    )
+                                    .cornerRadius(8)
+                            }
+                        }
                     }
-                    .font(.subheadline)
-                    .foregroundColor(.blue)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.blue.opacity(0.1))
-                    .cornerRadius(8)
+                    .padding(.horizontal, 20)
                 }
-                .disabled(appState.selectedVideoURLs.count < 2)
                 
-                HStack(spacing: 12) {
+                // Playback Controls
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Playback Controls")
+                        .font(.headline)
+                        .padding(.horizontal, 20)
+                    
+                    // Preview Button
                     Button(action: {
-                        // Export
+                        if selectedVideoIndices.isEmpty {
+                            // 如果没有选中任何视频，播放当前视频并进入全屏
+                            if let url = appState.currentVideoURL {
+                                videoManager.loadVideo(from: url)
+                                videoManager.setMuted(appState.isMuted)
+                                showingFullScreenPlayer = true
+                            }
+                        } else {
+                            // 播放选中的视频并进入全屏
+                            // 将 Set 转换为排序后的数组，保证播放顺序与缩略图顺序一致
+                            let selectedURLs = selectedVideoIndices.sorted().compactMap { index in
+                                appState.selectedVideoURLs.indices.contains(index) ? appState.selectedVideoURLs[index] : nil
+                            }
+                            videoManager.setMuted(appState.isMuted)
+                            videoManager.startLoopingSelectedVideos(selectedURLs)
+                            showingFullScreenPlayer = true
+                        }
                     }) {
                         HStack {
-                            Image(systemName: "square.and.arrow.down")
-                            Text("Export")
+                            Image(systemName: "play.circle.fill")
+                            Text("Preview Loop")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(Color.blue)
+                        .cornerRadius(12)
+                    }
+                    .disabled(appState.currentVideoURL == nil)
+                    .opacity(appState.currentVideoURL == nil ? 0.5 : 1.0)
+                    .padding(.horizontal, 20)
+                    
+                    // 显示选中视频数量
+                    if !selectedVideoIndices.isEmpty {
+                        Text("\(selectedVideoIndices.count) video(s) selected")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 20)
+                    }
+                }
+                
+                // Additional Options
+                VStack(spacing: 12) {
+                    Button(action: {
+                        onCombineVideos()
+                    }) {
+                        HStack {
+                            Image(systemName: "doc.on.doc")
+                            Text("Combine Videos")
                         }
                         .font(.subheadline)
                         .foregroundColor(.blue)
@@ -538,32 +611,52 @@ struct LoopControlsView: View {
                         .background(Color.blue.opacity(0.1))
                         .cornerRadius(8)
                     }
+                    .disabled(selectedVideoIndices.count < 2)
                     
-                    Button(action: {
-                        // Save loop
-                    }) {
-                        HStack {
-                            Image(systemName: "square.and.arrow.down")
-                            Text("Save Loop")
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            // Export
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down")
+                                Text("Export")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.blue)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
                         }
-                        .font(.subheadline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(Color.blue)
-                        .cornerRadius(8)
+                        
+                        Button(action: {
+                            // Save loop
+                        }) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.down")
+                                Text("Save Loop")
+                            }
+                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.blue)
+                            .cornerRadius(8)
+                        }
                     }
                 }
+                .padding(.horizontal, 20)
             }
-            .padding(.horizontal, 20)
-        }
-        .padding(.bottom, 100)
-        // 监听父视图中选中的缩略图索引
-        .onChange(of: appState.currentVideoIndex) {
-            // 当切换视频时，需要重置选中状态
-            if videoManager.player == nil {
-                selectedThumbnailIndex = nil
+            .padding(.bottom, 100)
+            // 监听父视图中选中的缩略图索引
+            .onChange(of: appState.currentVideoIndex) { oldIndex, newIndex in
+                // 当切换视频时，需要重置选中状态
+                if videoManager.player == nil {
+                    selectedThumbnailIndex = nil
+                }
             }
+        } else {
+            // Fallback on earlier versions
         }
     }
 }
@@ -685,7 +778,7 @@ struct FullScreenVideoPlayer: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: showControls)
-        .onChange(of: videoManager.isLooping) { _, newValue in
+        .onChange(of: videoManager.isLooping) { newValue in
             // 当循环播放结束时，自动关闭全屏
             if !newValue {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -693,7 +786,7 @@ struct FullScreenVideoPlayer: View {
                 }
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .background, .inactive:
                 // 应用进入后台时，停止播放并关闭全屏
@@ -748,6 +841,65 @@ struct FullScreenAVPlayerView: UIViewControllerRepresentable {
     
     func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
         uiViewController.showsPlaybackControls = showControls
+    }
+}
+
+// MARK: - Share Sheet
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+    }
+}
+
+// MARK: - Video Processing Overlay
+struct VideoProcessingOverlay: View {
+    let progress: Double
+    let message: String
+    
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.7)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                // 进度环
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.3), lineWidth: 8)
+                        .frame(width: 100, height: 100)
+                    
+                    Circle()
+                        .trim(from: 0, to: progress)
+                        .stroke(Color.blue, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .frame(width: 100, height: 100)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.linear, value: progress)
+                    
+                    Text("\(Int(progress * 100))%")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                }
+                
+                VStack(spacing: 8) {
+                    Text("Processing Video")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 40)
+            }
+        }
     }
 }
 

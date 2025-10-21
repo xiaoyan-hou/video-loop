@@ -147,7 +147,7 @@ struct MuteToolView: View {
             .navigationBarHidden(true)
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedVideos, matching: .videos, preferredItemEncoding: .automatic, photoLibrary: .shared())
-        .onChange(of: selectedVideos) { _, newValue in
+        .onChange(of: selectedVideos) { newValue in
             if !newValue.isEmpty {
                 // 导入所有选中的视频
                 loadVideos(from: newValue)
@@ -155,7 +155,7 @@ struct MuteToolView: View {
                 selectedVideos.removeAll()
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
+        .onChange(of: scenePhase) { newPhase in
             switch newPhase {
             case .background, .inactive:
                 // 应用进入后台时，暂停视频
@@ -274,21 +274,15 @@ struct MuteVideoPreviewView: View {
                     .frame(height: 200)
                     .cornerRadius(12)
                     .overlay(
-                        // Play/Pause Overlay
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Button(action: togglePlayPause) {
-                                    Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(.white)
-                                        .background(Color.black.opacity(0.3))
-                                        .clipShape(Circle())
-                                }
-                                Spacer()
+                        // Play/Pause Overlay - 完全居中
+                        ZStack {
+                            Button(action: togglePlayPause) {
+                                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.white)
+                                    .background(Color.black.opacity(0.3))
+                                    .clipShape(Circle())
                             }
-                            .padding(.bottom, 20)
                         }
                     )
                     .onTapGesture {

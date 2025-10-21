@@ -57,7 +57,7 @@ struct VideoLibraryView: View {
         }
         .navigationBarHidden(true)
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedVideos, matching: .videos, preferredItemEncoding: .automatic, photoLibrary: .shared())
-        .onChange(of: selectedVideos) { _, newValue in
+        .onChange(of: selectedVideos) { newValue in
             if !newValue.isEmpty {
                 // 导入所有选中的视频
                 loadVideos(from: newValue)
