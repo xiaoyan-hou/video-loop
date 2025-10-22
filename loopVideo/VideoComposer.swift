@@ -200,6 +200,112 @@ class VideoComposer: ObservableObject {
         return tempDirectory.appendingPathComponent(fileName)
     }
     
+    // 移除视频的所有音频
+    func removeAudioFromVideo(videoURL: URL, completion: @escaping (Result<URL, Error>) -> Void) {
+        DispatchQueue.main.async {
+            self.isProcessing = true
+            self.progress = 0.0
+            self.statusMessage = "Removing audio..."
+        }
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let asset = AVAsset(url: videoURL)
+            let composition = AVMutableComposition()
+            
+            do {
+                // 只添加视频轨道，不添加音频轨道
+                guard let videoTrack = composition.addMutableTrack(
+                    withMediaType: .video,
+                    preferredTrackID: kCMPersistentTrackID_Invalid
+                ) else {
+                    throw VideoComposerError.compositionFailed
+                }
+                
+                guard let assetVideoTrack = asset.tracks(withMediaType: .video).first else {
+                    throw VideoComposerError.compositionFailed
+                }
+                
+                let duration = asset.duration
+                let timeRange = CMTimeRange(start: .zero, duration: duration)
+                
+                DispatchQueue.main.async {
+                    self.progress = 0.3
+                    self.statusMessage = "Processing video track..."
+                }
+                
+                // 只添加视频轨道
+                try videoTrack.insertTimeRange(timeRange, of: assetVideoTrack, at: .zero)
+                videoTrack.preferredTransform = assetVideoTrack.preferredTransform
+                
+                // 导出无音频的视频
+                let outputURL = self.getTemporaryOutputURL()
+                
+                guard let exportSession = AVAssetExportSession(
+                    asset: composition,
+                    presetName: AVAssetExportPresetHighestQuality
+                ) else {
+                    throw VideoComposerError.exportFailed
+                }
+                
+                exportSession.outputURL = outputURL
+                exportSession.outputFileType = .mp4
+                exportSession.shouldOptimizeForNetworkUse = true
+                
+                DispatchQueue.main.async {
+                    self.progress = 0.5
+                    self.statusMessage = "Exporting video without audio..."
+                }
+                
+                // 监控导出进度
+                var timer: Timer?
+                DispatchQueue.main.async {
+                    timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+                        DispatchQueue.main.async {
+                            self.progress = 0.5 + Double(exportSession.progress) * 0.5
+                        }
+                    }
+                }
+                
+                exportSession.exportAsynchronously {
+                    DispatchQueue.main.async {
+                        timer?.invalidate()
+                        self.isProcessing = false
+                        self.progress = 1.0
+                    }
+                    
+                    switch exportSession.status {
+                    case .completed:
+                        DispatchQueue.main.async {
+                            self.statusMessage = "Audio removed successfully!"
+                        }
+                        completion(.success(outputURL))
+                        
+                    case .failed:
+                        if let error = exportSession.error {
+                            completion(.failure(error))
+                        } else {
+                            completion(.failure(VideoComposerError.exportFailed))
+                        }
+                        
+                    case .cancelled:
+                        completion(.failure(VideoComposerError.cancelled))
+                        
+                    default:
+                        completion(.failure(VideoComposerError.unknown))
+                    }
+                }
+                
+            } catch {
+                DispatchQueue.main.async {
+                    self.isProcessing = false
+                    self.progress = 0.0
+                    self.statusMessage = ""
+                }
+                completion(.failure(error))
+            }
+        }
+    }
+    
     // 显示成功提示
     func showSuccess(message: String) {
         alertTitle = "Success"
