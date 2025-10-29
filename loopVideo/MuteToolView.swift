@@ -665,65 +665,85 @@ struct MuteNoVideoStateView: View {
     
     var body: some View {
         ZStack {
-            // 背景颜色
+            // Background color
             Color(white: 0.97)
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
+                // 减少顶部空间，让内容更接近垂直居中
                 Spacer()
+                    .frame(height: 80)
                 
                 VStack(spacing: 24) {
-                    // Film Icon Container - 大圆形背景
+                    // Film icon container
                     ZStack {
                         Circle()
-                            .fill(Color(red: 0.85, green: 0.92, blue: 0.98)) // 浅蓝色背景
-                            .frame(width: 100, height: 100)
+                            .fill(Color.blue.opacity(0.1))
+                            .frame(width: 80, height: 80)
                         
                         Image(systemName: "film")
-                            .font(.system(size: 40, weight: .regular))
-                            .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0)) // iOS 蓝色
+                            .font(.system(size: 32, weight: .medium))
+                            .foregroundColor(Color.blue)
                     }
                     
                     VStack(spacing: 8) {
                         // Title
                         Text("No Video Selected")
-                            .font(.system(size: 22, weight: .bold))
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundColor(.black)
                         
                         // Subtitle
                         Text("Please import a video to get started")
                             .font(.system(size: 16))
-                            .foregroundColor(Color(white: 0.6))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                     }
                     
-                    // Info Box - 浅蓝色背景信息框
-                    HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: "info.circle.fill")
-                            .font(.system(size: 16))
-                            .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0))
-                            .padding(.top, 1)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Remove background noise from videos or use in situations requiring silent playback")
-                                .font(.system(size: 14))
-                                .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0))
-                                .multilineTextAlignment(.leading)
-                                .fixedSize(horizontal: false, vertical: true)
+                    VStack(spacing: 12) {
+                        // Usage Note
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "info.circle.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.blue)
+                                
+                                Text("Remove background noise from videos or use in situations requiring silent playback")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.blue)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(10)
+                        
+                        // Privacy Note
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "shield.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.blue)
+                                
+                                Text("Your video is processed locally, protecting your privacy")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.blue)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(10)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity)
-                    .background(Color(red: 0.93, green: 0.95, blue: 0.99)) // 浅蓝灰色背景
-                    .cornerRadius(10)
                     .padding(.horizontal, 20)
                     
-                    // Import Button - 蓝色主按钮
+                    // Import Button
                     Button(action: {
                         showingImagePicker = true
                     }) {
-                        HStack(spacing: 10) {
-                            Image(systemName: "photo")
+                        HStack(spacing: 8) {
+                            Image(systemName: "photo.on.rectangle")
                                 .font(.system(size: 18, weight: .medium))
                             Text("Import from Gallery")
                                 .font(.system(size: 17, weight: .semibold))
@@ -731,14 +751,15 @@ struct MuteNoVideoStateView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color(red: 0.0, green: 0.48, blue: 1.0)) // iOS 蓝色
-                        .cornerRadius(14)
+                        .background(Color.blue)
+                        .cornerRadius(12)
                     }
                     .padding(.horizontal, 20)
                 }
                 
                 Spacer()
             }
+            .padding(.horizontal, 16)
         }
     }
 }
