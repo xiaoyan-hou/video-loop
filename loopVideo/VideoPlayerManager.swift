@@ -133,9 +133,18 @@ class VideoPlayerManager: ObservableObject {
     private func addTimeObserver(to player: AVPlayer) {
         let interval = CMTime(seconds: 0.1, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            self?.currentTime = time.seconds
+            // 安全地更新当前时间
+            let timeValue = time.seconds
+            if timeValue.isFinite && !timeValue.isNaN {
+                self?.currentTime = timeValue
+            }
+            
+            // 安全地更新时长
             if self?.duration == 0 {
-                self?.duration = player.currentItem?.duration.seconds ?? 0
+                if let durationValue = player.currentItem?.duration.seconds,
+                   durationValue.isFinite && !durationValue.isNaN {
+                    self?.duration = durationValue
+                }
             }
         }
     }
@@ -225,8 +234,14 @@ class VideoPlayerManager: ObservableObject {
     }
     
     func formatTime(_ seconds: Double) -> String {
-        let minutes = Int(seconds) / 60
-        let remainingSeconds = Int(seconds) % 60
+        // 检查是否为有效数字
+        guard seconds.isFinite && !seconds.isNaN else {
+            return "0:00"
+        }
+        
+        let totalSeconds = max(0, Int(seconds))
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
         return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 }

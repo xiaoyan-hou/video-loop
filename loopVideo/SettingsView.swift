@@ -9,6 +9,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openURL) private var openURL
     
     var body: some View {
         NavigationView {
@@ -64,7 +65,9 @@ struct SettingsView: View {
                         icon: "lock",
                         title: "Privacy Policy",
                         action: {
-                            // Privacy policy action
+                            if let url = URL(string: "https://www.freeprivacypolicy.com/live/94b210b2-9fc4-4ef3-839e-e5feb999e71e") {
+                                openURL(url)
+                            }
                         }
                     )
                     
@@ -72,7 +75,9 @@ struct SettingsView: View {
                         icon: "doc.text",
                         title: "Terms of Use",
                         action: {
-                            // Terms of use action
+                            if let url = URL(string: "https://www.freeprivacypolicy.com/live/ccb25690-1345-4964-878e-fb249129cc92") {
+                                openURL(url)
+                            }
                         }
                     )
                     
@@ -92,7 +97,7 @@ struct SettingsView: View {
                 
                 // App Info
                 VStack(spacing: 4) {
-                    Text("LoopClip")
+                    Text("Smooth Loop")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     

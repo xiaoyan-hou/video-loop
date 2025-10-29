@@ -26,7 +26,7 @@ struct LoopCreatorView: View {
         VStack(spacing: 0) {
             // Header - 固定在顶部
             HStack {
-                Text("LoopClip")
+                Text("Smooth Loop")
                     .font(.title2)
                     .fontWeight(.bold)
                 
@@ -73,13 +73,13 @@ struct LoopCreatorView: View {
                             videoManager.setMuted(newValue)
                         }
                     
-                    
-                    
                     // Loop Controls
                     LoopControlsView(
                         selectedVideoIndices: $selectedVideoIndices, 
                         showingFullScreenPlayer: $showingFullScreenPlayer,
-                        onCombineVideos: combineSelectedVideos
+                        onCombineVideos: combineSelectedVideos,
+                        onAddVideo: { showingImagePicker = true },
+                        onRemoveVideo: removeSelectedVideos
                     )
                     .environmentObject(videoManager)
                     .environmentObject(appState)
@@ -156,6 +156,27 @@ struct LoopCreatorView: View {
                         print("Error loading video: \(error)")
                     }
                 }
+            }
+        }
+    }
+    
+    private func removeSelectedVideos() {
+        if appState.selectedVideoURLs.count == 1 {
+            // 只有一个视频时，删除当前视频
+            appState.removeVideo(at: 0)
+            selectedVideoIndices.removeAll()
+        } else {
+            // 有多个视频时，删除选中的视频
+            if selectedVideoIndices.isEmpty {
+                // 如果没有选中任何视频，删除当前播放的视频
+                appState.removeVideo(at: appState.currentVideoIndex)
+            } else {
+                // 删除选中的视频（从后往前删除，避免索引变化）
+                let sortedIndices = selectedVideoIndices.sorted(by: >)
+                for index in sortedIndices {
+                    appState.removeVideo(at: index)
+                }
+                selectedVideoIndices.removeAll()
             }
         }
     }
@@ -510,6 +531,8 @@ struct LoopControlsView: View {
     @Binding var showingFullScreenPlayer: Bool
     @State private var selectedThumbnailIndex: Int? = nil
     let onCombineVideos: () -> Void
+    let onAddVideo: () -> Void
+    let onRemoveVideo: () -> Void
     
     var body: some View {
         if #available(iOS 17.0, *) {
@@ -640,6 +663,42 @@ struct LoopControlsView: View {
                             .cornerRadius(8)
                         }
                     }
+                    
+                    // Video Action Buttons (Add & Remove)
+                    HStack(spacing: 12) {
+                        // Add Video Button
+                        Button(action: onAddVideo) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.system(size: 16))
+                                Text("Add Video")
+                                    .font(.system(size: 15, weight: .medium))
+                            }
+                            .foregroundColor(.blue)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.blue.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        
+                        // Remove Video Button
+                        Button(action: onRemoveVideo) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "trash.circle.fill")
+                                    .font(.system(size: 16))
+                                Text("Remove")
+                                    .font(.system(size: 15, weight: .medium))
+                            }
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 10)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(8)
+                        }
+                        .disabled(appState.selectedVideoURLs.isEmpty)
+                        .opacity(appState.selectedVideoURLs.isEmpty ? 0.5 : 1.0)
+                    }
+                    .padding(.top, 12)
                 }
                 .padding(.horizontal, 20)
             }

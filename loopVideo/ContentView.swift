@@ -133,7 +133,7 @@ struct WelcomeView: View {
             VStack(spacing: 40) {
                 // App Title
                 VStack(spacing: 8) {
-                    Text("LoopClip")
+                    Text("Smooth Loop")
                         .font(.largeTitle)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)

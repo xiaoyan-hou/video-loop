@@ -18,16 +18,16 @@ struct MuteToolView: View {
     @State private var showingShareSheet = false
     @State private var videoToShare: URL?
     @State private var processedVideoURL: URL?
+    @State private var selectedThumbnailIndex: Int? = nil
     @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
-        NavigationView {
             VStack(spacing: 0) {
-                // Header
-                HStack {
-                    Text("LoopClip")
-                        .font(.title2)
-                        .fontWeight(.bold)
+            // Header - 固定在顶部，避免被刘海屏遮挡
+            HStack {
+                Text("Smooth Loop")
+                    .font(.title2)
+                    .fontWeight(.bold)
                     
                     Spacer()
                     
@@ -50,30 +50,34 @@ struct MuteToolView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
+            .padding(.vertical, 12)
+            .background(Color(UIColor.systemBackground))
                 
+            // 内容区域 - 使用 ScrollView 避免被刘海屏遮挡
+            ScrollView {
                 if appState.hasImportedVideo {
+                    VStack(spacing: 0) {
                     // Video Preview
-                    MuteVideoPreviewView()
-                        .environmentObject(appState)
+                    MuteVideoPreviewView(
+                            selectedThumbnailIndex: $selectedThumbnailIndex,
+                            onAddVideo: { showingImagePicker = true },
+                            onRemoveVideo: removeSelectedVideo
+                    )
+                    .environmentObject(appState)
                         .environmentObject(videoManager)
                     
                     // Mute Controls
-                    MuteControlsView(
-                        onRemoveAudio: removeAudioFromCurrentVideo,
-                        onSave: saveProcessedVideo
-                    )
-                    .environmentObject(appState)
-                    
+                        MuteControlsView(
+                            onRemoveAudio: removeAudioFromCurrentVideo,
+                            onSave: saveProcessedVideo
+                        )
+                        .environmentObject(appState)
+                    }
                 } else {
                     // No Video State
                     MuteNoVideoStateView(showingImagePicker: $showingImagePicker)
                 }
-                
-                Spacer()
             }
-            .navigationBarHidden(true)
         }
         .photosPicker(isPresented: $showingImagePicker, selection: $selectedVideos, matching: .videos, preferredItemEncoding: .automatic, photoLibrary: .shared())
         .onChange(of: selectedVideos) { newValue in
@@ -186,6 +190,23 @@ struct MuteToolView: View {
         }
     }
     
+    private func removeSelectedVideo() {
+        if appState.selectedVideoURLs.count == 1 {
+            // 只有一个视频时，删除当前视频
+            appState.removeVideo(at: 0)
+            selectedThumbnailIndex = nil
+        } else {
+            // 有多个视频时，删除选中的缩略图视频
+            if let selectedIndex = selectedThumbnailIndex {
+                appState.removeVideo(at: selectedIndex)
+                selectedThumbnailIndex = nil
+            } else {
+                // 如果没有选中缩略图，删除当前播放的视频
+                appState.removeVideo(at: appState.currentVideoIndex)
+            }
+        }
+    }
+    
     private func loadVideos(from items: [PhotosPickerItem]) {
         for item in items {
             item.loadTransferable(type: VideoTransferable.self) { result in
@@ -209,14 +230,19 @@ struct MuteToolView: View {
 struct MuteVideoPreviewView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var videoManager: VideoPlayerManager
+    @Binding var selectedThumbnailIndex: Int?
+    let onAddVideo: () -> Void
+    let onRemoveVideo: () -> Void
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 0) {
             // 当有2个或更多视频时，显示缩略图列表
             if appState.selectedVideoURLs.count >= 2 {
-                MuteVideoThumbnailScrollView()
+                MuteVideoThumbnailScrollView(selectedThumbnailIndex: $selectedThumbnailIndex)
                     .environmentObject(appState)
                     .environmentObject(videoManager)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
             }
             
             // 视频播放器区域
@@ -240,6 +266,44 @@ struct MuteVideoPreviewView: View {
                         }
                     )
             }
+            
+            // Video Action Buttons (Add & Remove) - 视频下方
+            HStack(spacing: 12) {
+                // Add Video Button
+                Button(action: onAddVideo) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 16))
+                        Text("Add Video")
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                    .foregroundColor(.blue)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                
+                // Remove Video Button
+                Button(action: onRemoveVideo) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trash.circle.fill")
+                            .font(.system(size: 16))
+                        Text("Remove")
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .disabled(appState.selectedVideoURLs.isEmpty)
+                .opacity(appState.selectedVideoURLs.isEmpty ? 0.5 : 1.0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
         }
     }
 }
@@ -248,6 +312,7 @@ struct MuteVideoPreviewView: View {
 struct MuteVideoThumbnailScrollView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var videoManager: VideoPlayerManager
+    @Binding var selectedThumbnailIndex: Int?
     
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -256,8 +321,17 @@ struct MuteVideoThumbnailScrollView: View {
                     MuteThumbnailCard(
                         url: url,
                         isCurrentVideo: index == appState.currentVideoIndex,
+                        isSelected: selectedThumbnailIndex == index,
                         onTap: {
-                            // 切换到选中的视频
+                            // 切换选中状态（用于删除）
+                            if selectedThumbnailIndex == index {
+                                selectedThumbnailIndex = nil
+                            } else {
+                                selectedThumbnailIndex = index
+                            }
+                        },
+                        onDoubleTap: {
+                            // 双击切换到该视频播放
                             appState.currentVideoIndex = index
                             videoManager.loadVideo(from: url)
                             videoManager.setMuted(appState.isMuted)
@@ -275,7 +349,9 @@ struct MuteVideoThumbnailScrollView: View {
 struct MuteThumbnailCard: View {
     let url: URL
     let isCurrentVideo: Bool
+    let isSelected: Bool
     let onTap: () -> Void
+    let onDoubleTap: () -> Void
     @State private var thumbnailImage: UIImage? = nil
     
     var body: some View {
@@ -300,14 +376,42 @@ struct MuteThumbnailCard: View {
                 .clipped()
                 .cornerRadius(8)
                 
-                // 当前视频指示器
+                // 当前视频指示器（蓝色边框）
                 if isCurrentVideo {
                     RoundedRectangle(cornerRadius: 8)
                         .stroke(Color.blue, lineWidth: 3)
                         .frame(width: 100, height: 70)
                 }
+                
+                // 选中状态指示器（用于删除）
+                if isSelected {
+                    // 半透明遮罩
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.red.opacity(0.3))
+                        .frame(width: 100, height: 70)
+                    
+                    // 选中图标
+                    VStack {
+                HStack {
+                            Spacer()
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(.red)
+                                .background(Color.white, in: Circle())
+                        }
+                        Spacer()
+                    }
+                    .frame(width: 100, height: 70)
+                    .padding(4)
+                }
             }
         }
+        .simultaneousGesture(
+            TapGesture(count: 2)
+                .onEnded { _ in
+                    onDoubleTap()
+                }
+        )
         .onAppear {
             generateThumbnail()
         }
@@ -370,15 +474,15 @@ struct MuteVideoPlayerView: View {
                     
                     // 进度条
                     VStack(spacing: 4) {
-                        GeometryReader { geometry in
-                            ZStack(alignment: .leading) {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.3))
-                                    .frame(height: 4)
-                                
-                                Rectangle()
-                                    .fill(Color.blue)
-                                    .frame(width: geometry.size.width * (videoManager.currentTime / max(videoManager.duration, 1)), height: 4)
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(height: 4)
+                            
+                            Rectangle()
+                                .fill(Color.blue)
+                                    .frame(width: calculateProgressWidth(geometry: geometry), height: 4)
                             }
                         }
                         .frame(height: 4)
@@ -437,9 +541,30 @@ struct MuteVideoPlayerView: View {
         }
     }
     
+    private func calculateProgressWidth(geometry: GeometryProxy) -> CGFloat {
+        let currentTime = videoManager.currentTime
+        let duration = videoManager.duration
+        
+        // 检查是否为有效数字
+        guard currentTime.isFinite && !currentTime.isNaN,
+              duration.isFinite && !duration.isNaN,
+              duration > 0 else {
+            return 0
+        }
+        
+        let progress = currentTime / duration
+        return geometry.size.width * min(max(progress, 0), 1)
+    }
+    
     private func formatTime(_ seconds: Double) -> String {
-        let minutes = Int(seconds) / 60
-        let remainingSeconds = Int(seconds) % 60
+        // 检查是否为有效数字
+        guard seconds.isFinite && !seconds.isNaN else {
+            return "0:00"
+        }
+        
+        let totalSeconds = max(0, Int(seconds))
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
         return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 }
@@ -458,35 +583,35 @@ struct MuteControlsView: View {
                     .font(.headline)
                     .padding(.horizontal, 20)
                 
-                HStack {
-                    ZStack {
-                        Circle()
-                            .fill(Color.blue.opacity(0.1))
-                            .frame(width: 48, height: 48)
-                        
+            HStack {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.1))
+                        .frame(width: 48, height: 48)
+                    
                         Image(systemName: appState.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
                             .font(.title3)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Preview Mute")
-                            .font(.headline)
-                        Text("Temporarily mute audio during playback")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    Toggle("", isOn: $appState.isMuted)
-                        .toggleStyle(SwitchToggleStyle(tint: .blue))
+                        .foregroundColor(.blue)
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
-                .padding(.horizontal, 20)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                        Text("Preview Mute")
+                        .font(.headline)
+                        Text("Temporarily mute audio during playback")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Toggle("", isOn: $appState.isMuted)
+                    .toggleStyle(SwitchToggleStyle(tint: .blue))
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+            .padding(.horizontal, 20)
             }
             
             // Remove Audio Section
@@ -520,17 +645,17 @@ struct MuteControlsView: View {
                             Text("Remove All Audio")
                                 .font(.system(size: 17, weight: .semibold))
                         }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.blue)
+                    .background(Color.blue)
                         .cornerRadius(12)
                     }
                 }
                 .padding(.horizontal, 20)
             }
         }
-        .padding(.bottom, 100)
+        .padding(.bottom, 20)
     }
 }
 
@@ -539,6 +664,7 @@ struct MuteNoVideoStateView: View {
     @Binding var showingImagePicker: Bool
     
     var body: some View {
+        GeometryReader { geometry in
         VStack(spacing: 24) {
             Spacer()
             
@@ -620,6 +746,8 @@ struct MuteNoVideoStateView: View {
             .padding(.horizontal, 20)
             
             Spacer()
+            }
+            .frame(minHeight: geometry.size.height)
         }
     }
 }
