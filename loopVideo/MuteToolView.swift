@@ -664,90 +664,81 @@ struct MuteNoVideoStateView: View {
     @Binding var showingImagePicker: Bool
     
     var body: some View {
-        GeometryReader { geometry in
-        VStack(spacing: 24) {
-            Spacer()
+        ZStack {
+            // 背景颜色
+            Color(white: 0.97)
+                .ignoresSafeArea()
             
-            // Icon
-            ZStack {
-                Circle()
-                    .fill(Color.blue.opacity(0.1))
-                    .frame(width: 80, height: 80)
+            VStack(spacing: 0) {
+                Spacer()
                 
-                Image(systemName: "film")
-                    .font(.system(size: 32))
-                    .foregroundColor(.blue)
-            }
-            
-            // Text
-            VStack(spacing: 8) {
-                Text("No Video Selected")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("Please import a video to get started")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            
-            // Usage Note
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: "info.circle")
-                        .foregroundColor(.blue)
-                    Text("Remove background noise from videos or use in situations requiring silent playback")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(8)
-            .padding(.horizontal, 20)
-            
-            // Privacy Note
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Image(systemName: "shield")
-                        .foregroundColor(.blue)
-                    Text("Your video is processed locally, protecting your privacy")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(8)
-            .padding(.horizontal, 20)
-            
-            // Import Button with Multi-Select Info
-            Button(action: {
-                showingImagePicker = true
-            }) {
-                VStack(spacing: 8) {
-                    HStack {
-                        Image(systemName: "photo")
-                        Text("Import Videos")
+                VStack(spacing: 24) {
+                    // Film Icon Container - 大圆形背景
+                    ZStack {
+                        Circle()
+                            .fill(Color(red: 0.85, green: 0.92, blue: 0.98)) // 浅蓝色背景
+                            .frame(width: 100, height: 100)
+                        
+                        Image(systemName: "film")
+                            .font(.system(size: 40, weight: .regular))
+                            .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0)) // iOS 蓝色
                     }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
-                    .background(Color.blue)
-                    .cornerRadius(12)
                     
-                    Text("Select multiple videos to import at once")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    VStack(spacing: 8) {
+                        // Title
+                        Text("No Video Selected")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundColor(.black)
+                        
+                        // Subtitle
+                        Text("Please import a video to get started")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(white: 0.6))
+                    }
+                    
+                    // Info Box - 浅蓝色背景信息框
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0))
+                            .padding(.top, 1)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Remove background noise from videos or use in situations requiring silent playback")
+                                .font(.system(size: 14))
+                                .foregroundColor(Color(red: 0.0, green: 0.48, blue: 1.0))
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(Color(red: 0.93, green: 0.95, blue: 0.99)) // 浅蓝灰色背景
+                    .cornerRadius(10)
+                    .padding(.horizontal, 20)
+                    
+                    // Import Button - 蓝色主按钮
+                    Button(action: {
+                        showingImagePicker = true
+                    }) {
+                        HStack(spacing: 10) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 18, weight: .medium))
+                            Text("Import from Gallery")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(red: 0.0, green: 0.48, blue: 1.0)) // iOS 蓝色
+                        .cornerRadius(14)
+                    }
+                    .padding(.horizontal, 20)
                 }
+                
+                Spacer()
             }
-            .padding(.horizontal, 20)
-            
-            Spacer()
-            }
-            .frame(minHeight: geometry.size.height)
         }
     }
 }
