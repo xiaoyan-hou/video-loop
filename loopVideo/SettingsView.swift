@@ -16,6 +16,14 @@ struct SettingsView: View {
             VStack(spacing: 0) {
                 // Header
                 HStack {
+                    Button(action: {
+                        // Back action
+                    }) {
+                        Image(systemName: "arrow.left")
+                            .font(.title3)
+                            .foregroundColor(.primary)
+                    }
+                    
                     Spacer()
                     
                     Text("Settings")
@@ -23,6 +31,13 @@ struct SettingsView: View {
                         .fontWeight(.bold)
                     
                     Spacer()
+                    
+                    // Invisible button for balance
+                    Button(action: {}) {
+                        Image(systemName: "arrow.left")
+                            .font(.title3)
+                            .foregroundColor(.clear)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
